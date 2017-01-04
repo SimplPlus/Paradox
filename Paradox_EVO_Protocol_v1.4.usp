@@ -15,7 +15,7 @@ Comments:
   (Uncomment and declare compiler directives as needed)
 *******************************************************************************************/
 // #ENABLE_DYNAMIC
- #SYMBOL_NAME "Paradox_EVO_Protocol_v1.3"
+ #SYMBOL_NAME "Paradox_EVO_Protocol_v1.4"
  #HINT "Paradox Security EVO PRT3 Protocol"
 // #DEFINE_CONSTANT
 #CATEGORY "21" // Security
@@ -44,23 +44,23 @@ Compatibility: Digiplex EVO48, EVO96, EVO192 control panels
                DGP-848 control panel (V4.11 and up)
                DGP-NE96 control panel (V1.60 and up)
 
-Ä£ÄâÁ¿·´À¡
-Zone_Fb	1 ·ÀÇøÕı³£
-       	2 ·ÀÇø¿ªÂ·
-       	3 ·ÀÇø·À²ğ±¨¾¯
-       	4 ·À»ğ·ÀÇø¹ÊÕÏ
-       	5 ·ÀÇø±¨¾¯
-       	6 ·À»ğ·ÀÇø±¨¾¯
+æ¨¡æ‹Ÿé‡åé¦ˆ
+Zone_Fb	1 é˜²åŒºæ­£å¸¸
+       	2 é˜²åŒºå¼€è·¯
+       	3 é˜²åŒºé˜²æ‹†æŠ¥è­¦
+       	4 é˜²ç«é˜²åŒºæ•…éšœ
+       	5 é˜²åŒºæŠ¥è­¦
+       	6 é˜²ç«é˜²åŒºæŠ¥è­¦
 
-°æ±¾ĞŞ¸ÄÀúÊ·£º
+ç‰ˆæœ¬ä¿®æ”¹å†å²ï¼š
 v1.1
-1·ÀÇøÊıÁ¿ÓÉ³ÌĞò×Ô¶¯ÅĞ¶Ï¡£
+1é˜²åŒºæ•°é‡ç”±ç¨‹åºè‡ªåŠ¨åˆ¤æ–­ã€‚
 
 v1.2
-1Õë¶Ô 3 ÏµÖ÷»ú½øĞŞ¸´ BUG¡£
+1é’ˆå¯¹ 3 ç³»ä¸»æœºè¿›ä¿®å¤ BUGã€‚
 
 v1.3
-1ĞŞ¸´ bug
+1ä¿®å¤ bug
 
 http://www.apcube.com/paradox-security-evo-prt3-protocol/
 #HELP_END

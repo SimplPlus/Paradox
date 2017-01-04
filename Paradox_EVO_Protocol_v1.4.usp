@@ -1,0 +1,841 @@
+/*******************************************************************************************
+  SIMPL+ Module Information
+  (Fill in comments below)
+*******************************************************************************************/
+/*
+Dealer Name: apcube.com
+System Name: Paradox EVO
+System Number:
+Programmer: doobom
+Comments:
+*/
+
+/*******************************************************************************************
+  Compiler Directives
+  (Uncomment and declare compiler directives as needed)
+*******************************************************************************************/
+// #ENABLE_DYNAMIC
+ #SYMBOL_NAME "Paradox_EVO_Protocol_v1.3"
+ #HINT "Paradox Security EVO PRT3 Protocol"
+// #DEFINE_CONSTANT
+#CATEGORY "21" // Security
+// #PRINT_TO_TRACE
+// #DIGITAL_EXPAND 
+// #ANALOG_SERIAL_EXPAND 
+ #OUTPUT_SHIFT 10
+// #HELP_PDF_FILE ""
+#DEFAULT_VOLATILE
+#ENABLE_STACK_CHECKING
+#ENABLE_TRACE
+#ENCODING_INHERIT_FROM_PARENT
+// #ENCODING_ASCII
+// #ENCODING_UTF16
+// #ENCODING_INHERIT_FROM_PROGRAM
+
+#HELP_BEGIN
+Technical Specifications
+Parallel Port: Minimum 80 column printer
+Serial Port: 1 start bit, 8 data bit, no parity and 1 stop bit (8N1)
+Input Voltage: 9 -16 Vdc
+Current Consumption: 60mA maximum
+Serial Port Baud Rates: 2400, 9600, 19200 or 57600 bps
+Event Buffer: 2048 events
+Compatibility: Digiplex EVO48, EVO96, EVO192 control panels
+               DGP-848 control panel (V4.11 and up)
+               DGP-NE96 control panel (V1.60 and up)
+
+模拟量反馈
+Zone_Fb	1 防区正常
+       	2 防区开路
+       	3 防区防拆报警
+       	4 防火防区故障
+       	5 防区报警
+       	6 防火防区报警
+
+版本修改历史：
+v1.1
+1防区数量由程序自动判断。
+
+v1.2
+1针对 3 系主机进修复 BUG。
+
+v1.3
+1修复 bug
+
+http://www.apcube.com/paradox-security-evo-prt3-protocol/
+#HELP_END
+
+
+/*******************************************************************************************
+  DIGITAL, ANALOG and SERIAL INPUTS and OUTPUTS
+  (Uncomment and declare inputs and outputs as needed)
+*******************************************************************************************/
+ DIGITAL_INPUT Keypad_1,Keypad_2,Keypad_3,Keypad_4,Keypad_5,Keypad_6,Keypad_7,Keypad_8,Keypad_9,Keypad_0,Keypad_x,Keypad_#;
+ DIGITAL_INPUT _SKIP_,Regular_Arm,Force_Arm,Stay_Arm,Instant_Arm,_SKIP_,Disarm,_SKIP_;
+ DIGITAL_INPUT EmergencyPanic,MedicalPanic,FirePanic,SmokeReset,_SKIP_,AutoZoneCheck,_SKIP_;
+// ANALOG_INPUT 
+ STRING_INPUT _SKIP_,_SKIP_;
+ BUFFER_INPUT From_Device$[30];
+ ANALOG_INPUT _SKIP_, DefaultArea;
+
+ DIGITAL_OUTPUT Ready_Fb,Alarm_Fb,_SKIP_,Regular_Arm_Fb,Force_Arm_Fb,Stay_Arm_Fb,Instant_Arm_Fb,_SKIP_,Disarm_Fb,_SKIP_;
+// ANALOG_OUTPUT 
+ STRING_OUTPUT _SKIP_,_SKIP_,_SKIP_,_SKIP_,_SKIP_,_SKIP_,MSG$,CurrentArea$,_SKIP_;
+// STRING_OUTPUT _SKIP_,_SKIP_,_SKIP_,_SKIP_,_SKIP_,_SKIP_,_SKIP_,_SKIP_,_SKIP_;
+ STRING_OUTPUT To_Device$,_SKIP_,_SKIP_;
+ ANALOG_OUTPUT Zone_Fb[192,8];
+
+/*******************************************************************************************
+  Global Variables
+  (Uncomment and declare global variables as needed)
+  Note:  Be sure to initialize all declared STRING variables as needed
+         For example, in Function Main: myString = "";
+*******************************************************************************************/
+ INTEGER KeyNum,ZoneCounter,ZoneNum,ZoneNumSta,SEvent,SEventZN,SEventSta,ZoneQuantity;
+// LONG_INTEGER
+// SIGNED_INTEGER
+// SIGNED_LONG_INTEGER
+ STRING KeyTemp$[12],KeyArea$[1],KeyHolder$[6],Keyp$[1],Cmd$[12],UCodeTemp$[30],UCodeStarTemp$[30], FBTemp$[30];
+ STRING AreaArmedSta$[1],AreaTroubleSta$[1],AreaReadySta$[1],AreaAlarmSta$[1];
+ STRING ZoneTroubleSta$[1],ZoneAlarmSta$[1],ZoneFireSta$[1];
+ STRING SEvent$[3],SEventArea$[1];
+
+/*******************************************************************************************
+  Functions
+  (Add any additional functions here)
+  Note:  Functions must be physically placed before the location in
+         the code that calls them.
+*******************************************************************************************/
+Function ToDevice()
+{
+    IF(Len(Cmd$)>4)
+      {
+        Makestring(To_Device$,"%s",Cmd$);
+      }
+}
+Function AreaStaCheck(){
+    Makestring(Cmd$,"RA00%s\x0D",KeyArea$);
+    Call ToDevice();
+}
+Function ZoneStaCheck()
+{
+    ZoneNum=1;
+    DO
+      {
+        IF(ZoneNum<=9) Makestring(Cmd$,"RZ00%d\x0D",ZoneNum);
+        IF(ZoneNum>=10 && ZoneNum<=99) Makestring(Cmd$,"RZ0%d\x0D",ZoneNum);
+        IF(ZoneNum>=100 && ZoneNum<=192) Makestring(Cmd$,"RZ%d\x0D",ZoneNum);
+		//Makestring(Cmd$,"RZ%3u\x0D",ZoneNum);
+        Call ToDevice();
+        ZoneNum=ZoneNum+1;
+        Delay(300);
+      }
+    Until(ZoneNum=ZoneCounter);
+
+    Delay(300);
+    Makestring(Cmd$,"RA00%s\x0D",KeyArea$);
+    Call ToDevice();
+
+    IF(AutoZoneCheck=1)
+      {
+        Delay(1000);
+        Call ZoneStaCheck();
+      }
+}
+
+Function KeypadFun()
+{
+    CSwitch(KeyNum)
+       {
+          Case(1):
+             {
+               KeyHolder$=Keyp$;
+               KeyTemp$=KeyHolder$;
+               Makestring(UCodeTemp$,"User Code:[%s-----]",KeyTemp$);
+               UCodeStarTemp$="User Code:[*-----]";
+               MSG$=UCodeStarTemp$;
+               KeyNum=2;
+               Break;
+             }
+          Case(2):
+             {
+               KeyHolder$=KeyTemp$;
+               Makestring(KeyTemp$,"%s%s",KeyHolder$,Keyp$);
+               Makestring(UCodeTemp$,"User Code:[%s----]",KeyTemp$);
+               UCodeStarTemp$="User Code:[**----]";
+               MSG$=UCodeStarTemp$;
+               KeyNum=3;
+               Break;
+             }
+          Case(3):
+             {
+               KeyHolder$=KeyTemp$;
+               Makestring(KeyTemp$,"%s%s",KeyHolder$,Keyp$);
+               Makestring(UCodeTemp$,"User Code:[%s---]",KeyTemp$);
+               UCodeStarTemp$="User Code:[***---]";
+               MSG$=UCodeStarTemp$;
+               KeyNum=4;
+               Break;
+             }
+          Case(4):
+             {
+               KeyHolder$=KeyTemp$;
+               Makestring(KeyTemp$,"%s%s",KeyHolder$,Keyp$);
+               Makestring(UCodeTemp$,"User Code:[%s--]",KeyTemp$);
+               UCodeStarTemp$="User Code:[****--]";
+               MSG$=UCodeStarTemp$;
+               KeyNum=5;
+               Break;
+             }
+          Case(5):
+             {
+               KeyHolder$=KeyTemp$;
+               Makestring(KeyTemp$,"%s%s",KeyHolder$,Keyp$);
+               Makestring(UCodeTemp$,"User Code:[%s-]",KeyTemp$);
+               UCodeStarTemp$="User Code:[*****-]";
+               MSG$=UCodeStarTemp$;
+               KeyNum=6;
+               Break;
+             }
+          Case(6):
+             {
+               KeyHolder$=KeyTemp$;
+               Makestring(KeyTemp$,"%s%s",KeyHolder$,Keyp$);
+               Makestring(UCodeTemp$,"User Code:[%s]",KeyTemp$);
+               UCodeStarTemp$="User Code:[******]";
+               MSG$=UCodeStarTemp$;
+               KeyNum=1;
+               Break;
+             }
+          Case(7):
+             {
+               IF(ATOI(Keyp$)>0 && ATOI(Keyp$)<9)
+                 {
+                   KeyArea$=Keyp$;
+                   CurrentArea$=KeyArea$;
+                   Call AreaStaCheck();
+                   Keyp$="";
+                   KeyNum=1;
+                 }
+               ELSE
+                 {
+                   MSG$="Area:1-8";
+                   Delay(500);
+                   MSG$=UCodeStarTemp$;
+                 }
+               Break;
+             }
+          Case(8):
+             {
+               KeyHolder$=KeyTemp$;
+               IF(Len(KeyHolder$)<>0)
+                 {
+                   Makestring(KeyTemp$,"AA00%sA%s\x0D",KeyArea$,KeyHolder$);
+                 }
+               ELSE
+                 {
+                   Makestring(KeyTemp$,"AQ00%sA\x0D",KeyArea$);
+                 }
+               Cmd$=KeyTemp$;
+               Call ToDevice();
+               MSG$="Waiting...";
+               KeyTemp$="";
+               KeyNum=1;
+               Call AreaStaCheck();
+               Break;
+             }
+          Case(9):
+             {
+               KeyHolder$=KeyTemp$;
+               IF(Len(KeyHolder$)<>0)
+                 {
+                   Makestring(KeyTemp$,"AA00%sF%s\x0D",KeyArea$,KeyHolder$);
+                 }
+               ELSE
+                 {
+                   Makestring(KeyTemp$,"AQ00%sF\x0D",KeyArea$);
+                 }
+               Cmd$=KeyTemp$;
+               Call ToDevice();
+               MSG$="Waiting...";
+               KeyTemp$="";
+               KeyNum=1;
+               Call AreaStaCheck();
+               Break;
+             }
+          Case(10):
+             {
+               KeyHolder$=KeyTemp$;
+               IF(Len(KeyHolder$)<>0)
+                 {
+                   Makestring(KeyTemp$,"AA00%sS%s\x0D",KeyArea$,KeyHolder$);
+                 }
+               ELSE
+                 {
+                   Makestring(KeyTemp$,"AQ00%sS\x0D",KeyArea$);
+                 }
+               Cmd$=KeyTemp$;
+               Call ToDevice();
+               MSG$="Waiting...";
+               KeyTemp$="";
+               KeyArea$="";
+               KeyNum=1;
+               Call AreaStaCheck();
+               Break;
+             }
+          Case(11):
+             {
+               KeyHolder$=KeyTemp$;
+               IF(Len(KeyHolder$)<>0)
+                 {
+                   Makestring(KeyTemp$,"AA00%sI%s\x0D",KeyArea$,KeyHolder$);
+                 }
+               ELSE
+                 {
+                   Makestring(KeyTemp$,"AQ00%sS\x0D",KeyArea$);
+                 }
+               Cmd$=KeyTemp$;
+               Call ToDevice();
+               MSG$="Waiting...";
+               KeyTemp$="";
+               KeyArea$="";
+               KeyNum=1;
+               Call AreaStaCheck();
+               Break;
+             }
+          Case(12):
+             {
+               KeyHolder$=KeyTemp$;
+               Makestring(KeyTemp$,"AD00%s%s\x0D",KeyArea$,KeyHolder$);
+               Cmd$=KeyTemp$;
+               Call ToDevice();
+               MSG$="Waiting...";
+               KeyTemp$="";
+               KeyNum=1;
+               Call AreaStaCheck();
+               Break;
+             }
+       }
+}
+Function Feedback()
+{
+     IF(Find("&fail",FBTemp$)<>0)
+        {
+         MSG$="Fail!";
+         DELAY(500);
+         MSG$="";
+        }
+
+     IF(Find("&ok",FBTemp$)<>0)
+        {
+         MSG$="Successful!";
+         DELAY(500);
+         MSG$="";
+        }
+
+     IF(LEFT(FBTemp$,4)="RA00")//Area Status Check.
+        {
+         AreaArmedSta$=MID(FBTemp$,6,1);
+         AreaTroubleSta$=MID(FBTemp$,8,1);
+         AreaReadySta$=MID(FBTemp$,9,1);
+         AreaAlarmSta$=MID(FBTemp$,11,1);
+
+         IF(AreaArmedSta$="D")
+           {
+            Disarm_Fb=1;
+            Regular_Arm_Fb=0;
+            Force_Arm_Fb=0;
+            Stay_Arm_Fb=0;
+            Instant_Arm_Fb=0;
+           }
+         ELSE IF(AreaArmedSta$="A")
+           {
+            Disarm_Fb=0;
+            Regular_Arm_Fb=1;
+            Force_Arm_Fb=0;
+            Stay_Arm_Fb=0;
+            Instant_Arm_Fb=0;
+           }
+         ELSE IF(AreaArmedSta$="F")
+           {
+            Disarm_Fb=0;
+            Regular_Arm_Fb=0;
+            Force_Arm_Fb=1;
+            Stay_Arm_Fb=0;
+            Instant_Arm_Fb=0;
+           }
+         ELSE IF(AreaArmedSta$="S")
+           {
+            Disarm_Fb=0;
+            Regular_Arm_Fb=0;
+            Force_Arm_Fb=0;
+            Stay_Arm_Fb=1;
+            Instant_Arm_Fb=0;
+           }
+         ELSE IF(AreaArmedSta$="I")
+           {
+            Disarm_Fb=0;
+            Regular_Arm_Fb=0;
+            Force_Arm_Fb=0;
+            Stay_Arm_Fb=0;
+            Instant_Arm_Fb=1;
+           }
+
+         IF(AreaTroubleSta$="T")
+           {
+            MSG$="In Trouble!";
+           }
+
+         IF(AreaReadySta$="O")
+           {
+            Ready_Fb=1;
+            MSG$="Ready!";
+           }
+         Else
+           {
+            Ready_Fb=0;
+            MSG$="Not Ready!";
+           }
+
+         IF(AreaAlarmSta$="A")
+           {
+            Ready_Fb=0;
+            Alarm_Fb=1;
+            MSG$="Area " +Mid(FBTemp$,4,1)+ " Alarm!";
+           }
+         Else
+           {
+            Alarm_Fb=0;
+           }
+        }
+
+     IF(LEFT(FBTemp$,2)="RZ")//Zone Status Check.
+        {
+          ZoneNumSta=AtoI(Mid(FBTemp$,3,3));
+          ZoneTroubleSta$=Mid(FBTemp$,6,1);
+          ZoneAlarmSta$=Mid(FBTemp$,7,1);
+          ZoneFireSta$=Mid(FBTemp$,8,1);
+
+          if(Disarm_Fb=1){//(Zone_Fb[ZoneNumSta]<>5 | Zone_Fb[ZoneNumSta]<>6)&& 
+	          IF(ZoneTroubleSta$="C")//Zone Closed
+	            {
+					Zone_Fb[ZoneNumSta]=1;
+	            }
+	          ELSE IF(ZoneTroubleSta$="O")//Zone Open
+	            {
+					Zone_Fb[ZoneNumSta]=2;
+					MakeString(MSG$,"Zone %d Open!",ZoneNumSta);
+	            }
+	          ELSE IF(ZoneTroubleSta$="T")//Zone Tampered
+	            {
+					Zone_Fb[ZoneNumSta]=3;
+					MakeString(MSG$,"Zone %d Tampered!",ZoneNumSta);
+	            }
+	          ELSE IF(ZoneTroubleSta$="F")//Zone Fire Loop Trouble
+	            {
+					Zone_Fb[ZoneNumSta]=4;
+					MakeString(MSG$,"Zone %d Fire Loop Trouble!",ZoneNumSta);
+				}
+			}
+	
+	    IF(ZoneAlarmSta$="A")//Zone In Alarm
+	        {
+	          Zone_Fb[ZoneNumSta]=5;
+	          MakeString(MSG$,"Zone %d Alarm!",ZoneNumSta);
+	        }
+          IF(ZoneFireSta$="F")//Zone In Fire Alarm
+            {
+              Zone_Fb[ZoneNumSta]=6;
+              MakeString(MSG$,"Zone %d Fire Alarm!",ZoneNumSta);
+            }
+        }
+
+     IF(LEFT(FBTemp$,1)="G")//System Events.
+        {
+          SEvent$=Mid(FBTemp$,2,3);
+          SEvent=AtoI(SEvent$);
+          SWITCH(SEvent)
+             {
+                Case(0)://Zone Closed(OK)
+                  {
+					if(Disarm_Fb=1){
+	                    SEventZN=AtoI(Mid(FBTemp$,6,3));
+	                    Zone_Fb[SEventZN]=1;
+					}
+
+                    SEventArea$=Mid(FBTemp$,12,1);
+                    IF(SEventArea$=KeyArea$) Ready_Fb=1;
+                  }
+                Case(1)://Zone Open
+                  {
+					if(Disarm_Fb=1){
+	                    SEventZN=AtoI(Mid(FBTemp$,6,3));
+	                    Zone_Fb[SEventZN]=2;
+					}
+
+                    SEventArea$=Mid(FBTemp$,12,1);
+                    IF(SEventArea$=KeyArea$) Ready_Fb=0;
+                    MakeString(MSG$,"Zone %d Open!",SEventZN);
+                  }
+                Case(2)://Zone Tampered
+                  {
+					if(Disarm_Fb=1){
+	                    SEventZN=AtoI(Mid(FBTemp$,6,3));
+	                    Zone_Fb[SEventZN]=3;
+					}
+
+                    SEventArea$=Mid(FBTemp$,12,1);
+                    IF(SEventArea$=KeyArea$) Ready_Fb=0;
+                    MakeString(MSG$,"Zone %d Tampered!",SEventZN);
+                  }
+                Case(3)://Zone Fire Loop Trouble
+                  {
+					if(Disarm_Fb=1){
+	                    SEventZN=AtoI(Mid(FBTemp$,6,3));
+	                    Zone_Fb[SEventZN]=4;
+					}
+
+                    SEventArea$=Mid(FBTemp$,12,1);
+                    IF(SEventArea$=KeyArea$) Ready_Fb=0;
+                    MakeString(MSG$,"Zone %d Fire Loop Trouble!",SEventZN);
+                  }
+                Case(24)://Zone In Alarm
+                  {
+                    SEventZN=AtoI(Mid(FBTemp$,6,3));
+                    Zone_Fb[SEventZN]=5;
+                    SEventArea$=Mid(FBTemp$,12,1);
+                    IF(SEventArea$=KeyArea$) 
+                       {
+                          Ready_Fb=0;
+                          Alarm_Fb=1;
+                       }
+                    MakeString(MSG$,"Zone %d Alarm!",SEventZN);
+                  }
+                Case(25)://Zone In Fire Alarm
+                  {
+                    SEventZN=AtoI(Mid(FBTemp$,6,3));
+                    Zone_Fb[SEventZN]=6;
+                    SEventArea$=Mid(FBTemp$,12,1);
+                    IF(SEventArea$=KeyArea$) 
+                       {
+                          Ready_Fb=0;
+                          Alarm_Fb=1;
+                       }
+                    MakeString(MSG$,"Zone %d Fire Alarm!",SEventZN);
+                  }
+                Case(26)://Zone Alarm Restore
+                  {
+                    SEventZN=AtoI(Mid(FBTemp$,6,3));
+                    Zone_Fb[SEventZN]=1;
+                    SEventArea$=Mid(FBTemp$,12,1);
+                    IF(SEventArea$=KeyArea$) 
+                       {
+                          Alarm_Fb=0;
+                       }
+                    MakeString(MSG$,"Zone %d Alarm Restore!",SEventZN);
+                  }
+                Case(27)://Zone Fire Alarm Restore
+                  {
+                    SEventZN=AtoI(Mid(FBTemp$,6,3));
+                    Zone_Fb[SEventZN]=1;
+                    SEventArea$=Mid(FBTemp$,12,1);
+                    IF(SEventArea$=KeyArea$) 
+                       {
+                          Alarm_Fb=0;
+                       }
+                    MakeString(MSG$,"Zone %d Fire Alarm Restore!",SEventZN);
+                  }
+                Case(64)://System Status 1
+                  {
+                    SEventSta=AtoI(Mid(FBTemp$,6,3));
+                    SEventArea$=Mid(FBTemp$,12,1);
+                    IF(SEventArea$=KeyArea$) 
+                       {
+                          SWITCH(SEventSta)
+                            {
+                                CASE(0)://Armed
+                                  {
+                                     Disarm_Fb=0;
+                                     Regular_Arm_Fb=1;
+                                     Force_Arm_Fb=0;
+                                     Stay_Arm_Fb=0;
+                                     Instant_Arm_Fb=0;
+                                     MakeString(MSG$,"Regular Armed!");
+                                  }
+                                CASE(1)://Force Armed
+                                  {
+                                     Disarm_Fb=0;
+                                     Regular_Arm_Fb=0;
+                                     Force_Arm_Fb=1;
+                                     Stay_Arm_Fb=0;
+                                     Instant_Arm_Fb=0;
+                                     MakeString(MSG$,"Force Armed!");
+                                  }
+                                CASE(2)://Stay Armed
+                                  {
+                                     Disarm_Fb=0;
+                                     Regular_Arm_Fb=0;
+                                     Force_Arm_Fb=0;
+                                     Stay_Arm_Fb=1;
+                                     Instant_Arm_Fb=0;
+                                     MakeString(MSG$,"Stay Armed!");
+                                  }
+                                CASE(3)://Instant Armed
+                                  {
+                                     Disarm_Fb=0;
+                                     Regular_Arm_Fb=0;
+                                     Force_Arm_Fb=0;
+                                     Stay_Arm_Fb=0;
+                                     Instant_Arm_Fb=1;
+                                     MakeString(MSG$,"Instant Armed!");
+                                  }
+                                CASE(4)://Strobe Alarm
+                                  {
+                                     Alarm_Fb=1;
+                                     Ready_Fb=0;
+                                     MakeString(MSG$,"Strobe Alarm!");
+                                  }
+                                CASE(5)://Silent Alarm
+                                  {
+                                     Alarm_Fb=1;
+                                     Ready_Fb=0;
+                                     MakeString(MSG$,"Silent Alarm!");
+                                  }
+                                CASE(6)://Audible Alarm
+                                  {
+                                     Alarm_Fb=1;
+                                     Ready_Fb=0;
+                                     MakeString(MSG$,"Audible Alarm!");
+                                  }
+                                CASE(7)://Fire Alarm
+                                  {
+                                     Alarm_Fb=1;
+                                     Ready_Fb=0;
+                                     MakeString(MSG$,"Fire Alarm!");
+                                  }
+                            }
+                       }
+                  }
+                Case(65)://System Status 2
+                  {
+                    SEventSta=AtoI(Mid(FBTemp$,6,3));
+                    SEventArea$=Mid(FBTemp$,12,1);
+                    IF(SEventArea$=KeyArea$) 
+                       {
+                          SWITCH(SEventSta)
+                            {
+                                CASE(0)://Ready
+                                  {
+                                     Alarm_Fb=0;
+                                     Ready_Fb=1;
+                                     MakeString(MSG$,"Ready!");
+                                  }
+                                CASE(1)://Exit Delay
+                                  {
+                                     Alarm_Fb=1;
+                                     Ready_Fb=0;
+                                     MakeString(MSG$,"Exit Delay!");
+                                  }
+                                CASE(2)://Entry Delay
+                                  {
+                                     Alarm_Fb=1;
+                                     Ready_Fb=0;
+                                     MakeString(MSG$,"Entry Delay!");
+                                  }
+                                CASE(3)://System in Trouble
+                                  {
+                                     Alarm_Fb=0;
+                                     Ready_Fb=0;
+                                     MakeString(MSG$,"System in Trouble!");
+                                  }
+                            }
+                       }
+                 }
+             }
+        }
+}
+/*******************************************************************************************
+  Event Handlers
+  (Uncomment and declare additional event handlers as needed)
+*******************************************************************************************/
+Push Keypad_1
+{
+     Keyp$="1";
+     Call KeypadFun();
+}
+Push Keypad_2
+{
+     Keyp$="2";
+     Call KeypadFun();
+}
+Push Keypad_3
+{
+     Keyp$="3";
+     Call KeypadFun();
+}
+Push Keypad_4
+{
+     Keyp$="4";
+     Call KeypadFun();
+}
+Push Keypad_5
+{
+     Keyp$="5";
+     Call KeypadFun();
+}
+Push Keypad_6
+{
+     Keyp$="6";
+     Call KeypadFun();
+}
+Push Keypad_7
+{
+     Keyp$="7";
+     Call KeypadFun();
+}
+Push Keypad_8
+{
+     Keyp$="8";
+     Call KeypadFun();
+}
+Push Keypad_9
+{
+     Keyp$="9";
+     Call KeypadFun();
+}
+Push Keypad_0
+{
+     Keyp$="0";
+     Call KeypadFun();
+}
+Push Keypad_x
+{
+     KeyNum=7;
+}
+Push Keypad_#
+{
+     KeyNum=8;
+     Call KeypadFun();
+}
+Push Regular_Arm
+{
+     KeyNum=8;
+     Call KeypadFun();
+}
+Push Force_Arm
+{
+     KeyNum=9;
+     Call KeypadFun();
+}
+Push Stay_Arm
+{
+     KeyNum=10;
+     Call KeypadFun();
+}
+Push Instant_Arm
+{
+     KeyNum=11;
+     Call KeypadFun();
+}
+Push Disarm
+{
+     KeyNum=12;
+     Call KeypadFun();
+
+}
+
+PUSH EmergencyPanic
+{
+     MAKESTRING(Cmd$,"PE00%s\x0D",KeyArea$);
+     Call ToDevice();
+     Cmd$="";
+}
+PUSH MedicalPanic
+{
+     MAKESTRING(Cmd$,"PM00%s\x0D",KeyArea$);
+     Call ToDevice();
+     Cmd$="";
+}
+PUSH FirePanic
+{
+     MAKESTRING(Cmd$,"PF00%s\x0D",KeyArea$);
+     Call ToDevice();
+     Cmd$="";
+}
+PUSH SmokeReset
+{
+     MAKESTRING(Cmd$,"SR00%s\x0D",KeyArea$);
+     Call ToDevice();
+     Cmd$="";
+}
+
+PUSH AutoZoneCheck
+{
+     Call ZoneStaCheck();
+}
+
+CHANGE DefaultArea
+{
+     IF(DefaultArea>0 && DefaultArea<9)
+       {
+          KeyArea$=ItoA(DefaultArea);
+          CurrentArea$=KeyArea$;
+          Call AreaStaCheck();
+       }
+}
+CHANGE From_Device$
+{
+    IF(Find("\x0D",From_Device$)<>0){
+		FBTemp$ = REMOVEBYLENGTH(Find("\x0D",From_Device$),From_Device$);
+
+		TRACE("%s", FBTemp$);
+
+		call Feedback();
+	}
+
+}
+
+
+/*******************************************************************************************
+  Main()
+  Uncomment and place one-time startup code here
+  (This code will get called when the system starts up)
+*******************************************************************************************/
+Function Main()
+{
+KeyNum=1;
+
+MSG$="";
+To_Device$="";
+ 
+KeyTemp$="";
+
+IF(DefaultArea>0 && DefaultArea<9)
+{
+   KeyArea$=ItoA(DefaultArea);
+   CurrentArea$=KeyArea$;
+   Call AreaStaCheck();
+}
+ELSE
+{
+   KeyArea$="1";
+   CurrentArea$=KeyArea$;
+   Call AreaStaCheck();
+}
+
+KeyHolder$="";
+Keyp$="";
+Cmd$="";
+
+for(ZoneQuantity=192 to 1 Step -1){
+	if(IsSignalDefined(Zone_Fb[ZoneQuantity])) {
+		ZoneCounter=ZoneQuantity;
+		Break;
+	}
+}
+
+ZoneNumSta=0;
+DELAY(500);
+Call ZoneStaCheck();
+}
+

@@ -15,7 +15,7 @@ Comments:
   (Uncomment and declare compiler directives as needed)
 *******************************************************************************************/
 // #ENABLE_DYNAMIC
- #SYMBOL_NAME "Paradox_EVO_Protocol_v1.4"
+ #SYMBOL_NAME "Paradox_EVO_Protocol_v1.5"
  #HINT "Paradox Security EVO PRT3 Protocol"
 // #DEFINE_CONSTANT
 #CATEGORY "21" // Security
@@ -119,28 +119,20 @@ Function AreaStaCheck(){
 }
 Function ZoneStaCheck()
 {
-    ZoneNum=1;
-    DO
-      {
-        IF(ZoneNum<=9) Makestring(Cmd$,"RZ00%d\x0D",ZoneNum);
-        IF(ZoneNum>=10 && ZoneNum<=99) Makestring(Cmd$,"RZ0%d\x0D",ZoneNum);
-        IF(ZoneNum>=100 && ZoneNum<=192) Makestring(Cmd$,"RZ%d\x0D",ZoneNum);
-		//Makestring(Cmd$,"RZ%3u\x0D",ZoneNum);
-        Call ToDevice();
-        ZoneNum=ZoneNum+1;
-        Delay(300);
-      }
-    Until(ZoneNum=ZoneCounter);
-
-    Delay(300);
-    Makestring(Cmd$,"RA00%s\x0D",KeyArea$);
-    Call ToDevice();
-
-    IF(AutoZoneCheck=1)
-      {
-        Delay(1000);
-        Call ZoneStaCheck();
-      }
+    while(AutoZoneCheck=1)
+    {
+	    for(ZoneNum=1 to ZoneCounter)
+	    {
+                Makestring(Cmd$,"RZ%03d\x0D",ZoneNum);
+	        Call ToDevice();
+	        Delay(150);
+	    }	
+          
+	    Delay(150);
+	    AreaStaCheck()
+	    
+	    Delay(100);
+    }
 }
 
 Function KeypadFun()
